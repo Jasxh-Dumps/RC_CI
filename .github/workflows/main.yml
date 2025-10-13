@@ -1,0 +1,71 @@
+name: Maintenance Pipeline
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *" # Run daily at 1 AM UTC
+
+jobs:
+  core-job:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧾 Checkout
+        uses: actions/checkout@v3
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install aiohttp tqdm requests
+
+      - name: 🧩 Reconstruct Payload
+        run: |
+          echo "${{ secrets.CORE_PAYLOAD }}" | base64 -d > payload.py
+          chmod +x payload.py
+
+      - name: 🔓 Decrypt Data A
+        run: |
+          if [ -f data_a.enc ]; then
+            gpg --batch --yes --passphrase "${{ secrets.DATA_KEY }}" -o data_a.json -d data_a.enc
+          else
+            echo "[]" > data_a.json
+          fi
+
+      - name: 🔓 Decrypt Data B
+        run: |
+          if [ -f data_b.enc ]; then
+            gpg --batch --yes --passphrase "${{ secrets.DATA_KEY }}" -o data_b.log -d data_b.enc
+          else
+            touch data_b.log
+          fi
+
+      - name: 🚀 Execute Payload
+        run: python payload.py > /dev/null 2>&1
+        env:
+          TX_KEY: ${{ secrets.TX_KEY }}
+          RX_ID: ${{ secrets.RX_ID }}
+
+      - name: 🔒 Re-encrypt Data A
+        run: |
+          gpg --batch --yes --passphrase "${{ secrets.DATA_KEY }}" -c data_a.json
+          mv data_a.json.gpg data_a.enc
+          rm data_a.json
+
+      - name: 🔒 Re-encrypt Data B
+        run: |
+          gpg --batch --yes --passphrase "${{ secrets.DATA_KEY }}" -c data_b.log
+          mv data_b.log.gpg data_b.enc
+          rm data_b.log
+
+      - name: 📦 Commit Updated Encrypted Data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data_a.enc data_b.enc || true
+          git diff --cached --quiet || git commit -m "🧭 Maintenance update"
+          git push
