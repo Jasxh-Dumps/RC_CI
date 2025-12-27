@@ -1,0 +1,23 @@
+name: Realme Community - Full Daily Tasks
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+jobs:
+  daily-tasks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up environment variables
+        run: |
+          GGSESSION=$(echo "${{ secrets.GGSESSION_BASE64 }}" | base64 -d)
+          echo "GGSESSION=$GGSESSION" >> $GITHUB_ENV
+
+      - name: Run Realme Community daily automation
+        run: |
+          SCRIPT=$(echo "${{ secrets.REALME_SCRIPT_BASE64 }}" | base64 -d)
+          bash -c "$SCRIPT"
